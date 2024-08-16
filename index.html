@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vertical Dynamic Stacked Scatterplots</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+        }
+
+        #add-plot-form {
+            margin: 20px 0;
+        }
+
+        #scatter-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .scatter-plot {
+            margin-bottom: 40px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="add-plot-form">
+        <input type="text" id="category-input" placeholder="Enter category name">
+        <button id="add-plot-button">Add Scatterplot</button>
+    </div>
+    <div id="scatter-container"></div>
+
+    <script>
+        const width = 600;
+        const height = 400;
+        const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+
+        let plots = {};
+
+        function createScatterPlot(data, category) {
+            if (!plots[category]) {
+                const svg = d3.select("#scatter-container")
+                    .append("svg")
+                    .attr("width", width)
+                    .attr("height", height)
+                    .attr("class", "scatter-plot")
+                    .append("g")
+                    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+                const xScale = d3.scaleLinear().range([0, plotWidth]);
+                const yScale = d3.scaleLinear().range([plotHeight, 0]);
+
+                svg.append("g")
+                    .attr("transform", `translate(0,${plotHeight})`)
+                    .attr("class", "x-axis");
+
+                svg.append("g")
+                    .attr("class", "y-axis");
+
+                svg.append("text")
+                    .attr("x", plotWidth / 2)
+                    .attr("y", plotHeight + margin.bottom)
+                    .style("text-anchor", "middle")
+                    .text("X Axis");
+
+                svg.append("text")
+                    .attr("transform", "rotate(-90)")
+                    .attr("y", 0 - margin.left)
+                    .attr("x", 0 - (plotHeight / 2))
+                    .attr("dy", "1em")
+                    .style("text-anchor", "middle")
+                    .text("Y Axis");
+
+                svg.append("text")
+                    .attr("x", plotWidth / 2)
+                    .attr("y", 0 - (margin.top / 2))
+                    .attr("text-anchor", "middle")
+                    .style("font-size", "16px")
+                    .text(category);
+
+                plots[category] = { svg, xScale, yScale, data: [] };
+            }
+
+            if (data) {
+                updateScatterPlot(data, category);
+            }
+        }
+
+        function updateScatterPlot(newData, category) {
+            const plot = plots[category];
+            plot.data = plot.data.concat(newData);
+
+            const { svg, xScale, yScale, data } = plot;
+
+            xScale.domain(d3.extent(data, d => d.x));
+            yScale.domain(d3.extent(data, d => d.y));
+
+            svg.select(".x-axis").call(d3.axisBottom(xScale));
+            svg.select(".y-axis").call(d3.axisLeft(yScale));
+
+            const circles = svg.selectAll("circle")
+                .data(data, d => d.id);
+
+            circles.enter()
+                .append("circle")
+                .attr("r", 5)
+                .attr("cx", d => xScale(d.x))
+                .attr("cy", d => yScale(d.y))
+                .attr("fill", "steelblue")
+                .attr("opacity", 0.7);
+
+            circles
+                .attr("cx", d => xScale(d.x))
+                .attr("cy", d => yScale(d.y));
+
+            circles.exit().remove();
+        }
+
+        // Add event listener for the "Add Scatterplot" button
+        document.getElementById("add-plot-button").addEventListener("click", function () {
+            const categoryInput = document.getElementById("category-input");
+            const category = categoryInput.value.trim();
+
+            if (category) {
+                createScatterPlot(null, category);
+                categoryInput.value = "";
+            } else {
+                alert("Please enter a category name.");
+            }
+        });
+
+        // Set up SSE connection
+        const eventSource = new EventSource('/events');
+
+        eventSource.onmessage = function (event) {
+            const data = JSON.parse(event.data);
+            createScatterPlot(data.points, data.category);
+        };
+
+        eventSource.onerror = function (error) {
+            console.error("EventSource failed:", error);
+            eventSource.close();
+        };
+    </script>
+</body>
+
+</html>
